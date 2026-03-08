@@ -1,0 +1,20 @@
+# AWS Amplify build spec for Sahaayak AI frontend (Vite + React).
+# Set in Amplify Console: Build settings > Environment variables:
+#   VITE_API_URL = your API Gateway URL (e.g. https://xxxx.execute-api.ap-south-1.amazonaws.com/Prod)
+# so the built app calls the correct backend. No trailing slash.
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*

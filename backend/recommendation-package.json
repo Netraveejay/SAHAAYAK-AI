@@ -1,0 +1,14 @@
+{
+  "name": "sahaayak-ai-recommendation",
+  "version": "1.0.0",
+  "description": "AWS Lambda for AI-powered scheme recommendations",
+  "main": "recommendationLambda.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.490.0",
+    "@aws-sdk/lib-dynamodb": "^3.490.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.490.0",
+    "@aws-sdk/client-translate": "^3.490.0",
+    "@aws-sdk/client-polly": "^3.490.0",
+    "@aws-sdk/client-s3": "^3.490.0"
+  }
+}

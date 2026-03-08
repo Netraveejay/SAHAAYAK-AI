@@ -1,0 +1,209 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Sahaayak AI Backend - AWS SAM Template
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs18.x
+    Environment:
+      Variables:
+        USERS_TABLE: !Ref UsersTable
+        PROFILES_TABLE: !Ref ProfilesTable
+        APPLICATIONS_TABLE: !Ref ApplicationsTable
+        PENDING_SCHEMES_TABLE: !Ref PendingSchemesTable
+        SCHEMES_TABLE: !Ref SchemesTable
+        S3_BUCKET: !Ref UploadsBucket
+        USE_DYNAMODB: 'true'
+        USE_S3: 'true'
+        USE_BEDROCK: 'true'
+
+Resources:
+  # DynamoDB Tables
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SahaayakUsers
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: mobile
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: MobileIndex
+          KeySchema:
+            - AttributeName: mobile
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ProfilesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SahaayakProfiles
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: profileId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: profileId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ApplicationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SahaayakApplications
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: applicationId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: applicationId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  PendingSchemesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SahaayakPendingSchemes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: schemeId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: schemeId
+          KeyType: HASH
+
+  SchemesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SahaayakSchemes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: schemeId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: schemeId
+          KeyType: HASH
+
+  # S3 Bucket
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'sahaayak-ai-uploads-${AWS::AccountId}'
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+            AllowedHeaders:
+              - '*'
+
+  # Lambda Function
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: lambda.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProfilesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApplicationsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PendingSchemesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SchemesTable
+        - S3CrudPolicy:
+            BucketName: !Ref UploadsBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - translate:TranslateText
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - polly:SynthesizeSpeech
+              Resource: '*'
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+  CrawlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: crawlerLambda.handler
+      Timeout: 300
+      Environment:
+        Variables:
+          PENDING_SCHEMES_TABLE: !Ref PendingSchemesTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PendingSchemesTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        DailySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: 'rate(1 day)'
+            Description: 'Run scheme crawler daily'
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/'
+  
+  UsersTableName:
+    Description: DynamoDB Users Table
+    Value: !Ref UsersTable
+  
+  ProfilesTableName:
+    Description: DynamoDB Profiles Table
+    Value: !Ref ProfilesTable
+  
+  ApplicationsTableName:
+    Description: DynamoDB Applications Table
+    Value: !Ref ApplicationsTable
+  
+  UploadsBucketName:
+    Description: S3 Uploads Bucket
+    Value: !Ref UploadsBucket

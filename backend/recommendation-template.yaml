@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Sahaayak AI - Production AWS Architecture
+
+Resources:
+  # DynamoDB Table for Schemes
+  SchemesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SahaayakSchemes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: schemeId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: schemeId
+          KeyType: HASH
+
+  # S3 Bucket for Audio Files
+  AudioBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'sahaayak-audio-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ['*']
+            AllowedMethods: [GET]
+            AllowedHeaders: ['*']
+
+  AudioBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AudioBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${AudioBucket.Arn}/*'
+
+  # Lambda Function
+  RecommendationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: recommendationLambda.handler
+      Runtime: nodejs18.x
+      Timeout: 60
+      MemorySize: 1024
+      Environment:
+        Variables:
+          SCHEMES_TABLE: !Ref SchemesTable
+          AUDIO_BUCKET: !Ref AudioBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SchemesTable
+        - S3CrudPolicy:
+            BucketName: !Ref AudioBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - translate:TranslateText
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - polly:SynthesizeSpeech
+              Resource: '*'
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /recommend
+            Method: POST
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/recommend'
+  
+  SchemesTableName:
+    Description: DynamoDB Schemes Table
+    Value: !Ref SchemesTable
+  
+  AudioBucketName:
+    Description: S3 Audio Bucket
+    Value: !Ref AudioBucket
