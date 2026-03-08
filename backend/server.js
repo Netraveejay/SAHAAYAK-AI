@@ -20,10 +20,28 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Allow frontend on any common dev port (3000, 3004–3010)
-const allowedOrigins = ['http://localhost:3000'];
-for (let p = 3004; p <= 3010; p++) allowedOrigins.push(`http://localhost:${p}`);
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+// CORS Configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3004',
+  process.env.FRONTEND_URL // Set this in production (e.g., https://xxx.amplifyapp.com)
+].filter(Boolean);
+
+// Allow all localhost ports in development
+if (process.env.NODE_ENV !== 'production') {
+  for (let p = 3005; p <= 3010; p++) allowedOrigins.push(`http://localhost:${p}`);
+}
+
+app.use(cors({ 
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true 
+}));
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
 
